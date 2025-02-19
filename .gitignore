@@ -10,3 +10,8 @@ token.json
 __pycache__/
 *.pyc
 *.pyo
+
+
+# Added by cargo
+
+/target
