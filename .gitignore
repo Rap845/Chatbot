@@ -1,0 +1,12 @@
+# Arquivos de configuração e credenciais (NÃO versionar!)
+.env
+client_secret.json
+token.json
+
+# Arquivos do PyCharm
+.idea/
+
+# Arquivos do Python
+__pycache__/
+*.pyc
+*.pyo
