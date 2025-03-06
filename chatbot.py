@@ -20,6 +20,10 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
 
+# 🔹 Carregar credenciais do Google Sheets do .env
+GOOGLE_CLIENT_SECRET_JSON = os.getenv("GOOGLE_CLIENT_SECRET_JSON")
+GOOGLE_TOKEN_JSON = os.getenv("GOOGLE_TOKEN_JSON")
+
 # 🔹 Configurar a API do Gemini com a chave carregada
 genai.configure(api_key=GOOGLE_API_KEY)
 
@@ -53,18 +57,20 @@ def sanitize_response(response):
 def get_google_sheets_data():
     """Autentica e busca dados da planilha no Google Sheets"""
     creds = None
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+
+    if GOOGLE_TOKEN_JSON:
+        creds = Credentials.from_authorized_user_info(json.loads(GOOGLE_TOKEN_JSON))
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file("client_secret.json", SCOPES)
+            client_secret_data = json.loads(GOOGLE_CLIENT_SECRET_JSON)
+            flow = InstalledAppFlow.from_client_config(client_secret_data, SCOPES)
             creds = flow.run_local_server(port=0)
 
-        with open("token.json", "w") as token:
-            token.write(creds.to_json())
+        # Salvar novo token na variável de ambiente
+        os.environ["GOOGLE_TOKEN_JSON"] = creds.to_json()
 
     try:
         service = build("sheets", "v4", credentials=creds)
@@ -89,7 +95,6 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
     # Verifica se o usuário já foi autorizado
     if chat_id not in USER_STATE:
-        # Se o usuário não forneceu um nome ainda, verifica o nome digitado
         if user_text in AUTHORIZED_USERS:
             USER_STATE[chat_id] = "authorized"
             await update.message.reply_text("✅ Acesso autorizado! Como posso te ajudar?", reply_markup=MENU_KEYBOARD)
@@ -113,10 +118,8 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text(f"⚠️ Erro ao acessar a planilha: {data}")
         return
 
-    # Converter os dados da planilha para JSON legível
     json_data = json.dumps(data, indent=2)
 
-    # Criar um prompt detalhado para o Gemini AI
     prompt = f"""
     Você é um assistente especializado em análise de dados de planilhas. 
     Aqui estão os dados da planilha em formato JSON:
@@ -127,8 +130,6 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     """
 
     response = generate_gemini_response(prompt)
-
-    # Remover caracteres especiais antes de enviar
     clean_response = sanitize_response(response)
 
     await update.message.reply_text(clean_response)
@@ -150,7 +151,6 @@ async def start(update: Update, context: CallbackContext) -> None:
     """Mensagem de boas-vindas e solicitação do nome do usuário"""
     chat_id = update.message.chat_id
 
-    # Resetar o estado do usuário ao iniciar o bot
     USER_STATE.pop(chat_id, None)
 
     await update.message.reply_text(
